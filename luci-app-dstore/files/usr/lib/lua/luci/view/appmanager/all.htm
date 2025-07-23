@@ -1,0 +1,134 @@
+<%+header%>
+
+<script>
+(function () {
+  function isDarkMode() {
+    const bgColor = getComputedStyle(document.body).backgroundColor;
+    if (!bgColor) return false;
+
+    const rgb = bgColor.match(/\d+/g);
+    if (!rgb) return false;
+
+    const [r, g, b] = rgb.map(Number);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128;
+  }
+
+  function loadThemeCSS() {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = isDarkMode()
+      ? '<%=resource%>/view/appmanager/all_dark.css'
+      : '<%=resource%>/view/appmanager/all.css';
+    document.head.appendChild(css);
+  }
+
+  // Run immediately, before full load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadThemeCSS);
+  } else {
+    loadThemeCSS();
+  }
+})();
+</script>
+
+
+<h3 class="cbi-section-title">All</h3>
+
+<div id="install-dialog"
+     style="display:none; white-space:pre-wrap; background:#111; color:#0f0; padding:10px;
+            margin:20px 0; border-radius:4px;">
+</div>
+
+<div id="app-grid">
+  <p class="cbi-value-description">Loading all apps...</p>
+</div>
+
+<script>
+'use strict';
+
+let appList = [];
+let installedList = [];
+
+async function getInstalledPkgs() {
+  const res = await fetch('<%=luci.dispatcher.build_url("admin", "services", "appmanager", "api", "manage")%>?do=list');
+  return (await res.text()).split('\n').map(line => line.trim().split(' - ')[0]).filter(Boolean);
+}
+
+async function loadApps() {
+  const grid = document.getElementById('app-grid');
+  grid.innerHTML = '<p class="cbi-value-description">Loading...</p>';
+
+  try {
+    const appRes = await fetch('<%=luci.dispatcher.build_url("admin", "services", "appmanager", "api", "list")%>');
+    appList = await appRes.json();
+    installedList = await getInstalledPkgs();
+    renderGrid();
+  } catch (e) {
+    grid.innerHTML = '<div class="cbi-section-error">Failed to load app list.<br>Check the <em>Settings</em> tab.</div>';
+    console.error(e);
+  }
+}
+
+function renderGrid() {
+  const grid = document.getElementById('app-grid');
+  grid.innerHTML = '';
+
+  if (!appList.length) {
+    grid.innerHTML = '<div class="cbi-section-error">No apps found.</div>';
+    return;
+  }
+
+  for (const app of appList) {
+    const isInstalled = installedList.includes(app.package);
+    const tutorialURL = app.tutorial || 'https://dotycat.com';
+
+    const card = document.createElement('div');
+    card.className = 'app-card';
+
+    card.innerHTML = `
+      <img src="${app.avatar}" alt="${app.name}">
+      <div class="app-info">
+        <p><b>${app.name}</b> <small>${app.version || '-'}</small></p>
+        <div class="desc">${app.description || ''}</div>
+        <div class="footer">
+          Author: ${app.author || '-'}<br>
+          Update date: ${app.updated || '-'}
+        </div>
+        <div class="action-buttons">
+          <button class="${isInstalled ? 'uninstall-btn' : 'install-btn'}" onclick="manageApp('${app.package}', '${app.url}', '${isInstalled ? 'uninstall' : 'install'}')">
+            ${isInstalled ? 'Uninstall' : 'Install'}
+          </button>
+          <button class="tutorial-btn" onclick="window.open('${tutorialURL}', '_blank')">Tutorial</button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+}
+
+function manageApp(pkg, url, action) {
+  const dialog = document.getElementById('install-dialog');
+  dialog.style.display = 'block';
+  dialog.innerText = `${action === 'install' ? 'Installing' : 'Uninstalling'} ${pkg}...\n`;
+
+  const form = new FormData();
+  form.append('pkg', pkg);
+  form.append('url', url);
+  form.append('do', action);
+
+  fetch('<%=luci.dispatcher.build_url("admin", "services", "appmanager", "api", "manage")%>', {
+    method: 'POST',
+    body: form
+  })
+  .then(res => res.text())
+  .then(out => {
+    dialog.innerText += out + '\nReloading...';
+    setTimeout(loadApps, 3000);
+  });
+}
+
+window.onload = loadApps;
+</script>
+
+<%+footer%>

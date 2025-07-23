@@ -1,0 +1,27 @@
+#!/bin/sh
+
+if ! command -v vnstat >/dev/null 2>&1; then
+  opkg update
+  opkg install vnstat
+fi
+
+mkdir -p /etc/vnstat
+
+if ! grep -q '^DatabaseDir "/etc/vnstat"' /etc/vnstat.conf; then
+  sed -i 's|^DatabaseDir .*|DatabaseDir "/etc/vnstat"|' /etc/vnstat.conf
+fi
+
+IFACE="$(ip -4 route list 0/0 | awk '{print $5}' | head -n1)"
+[ -z "$IFACE" ] && IFACE="wwan0"
+
+if [ ! -f "/etc/vnstat/$IFACE" ]; then
+  vnstat --create -i "$IFACE"
+fi
+
+/etc/init.d/vnstat enable
+/etc/init.d/vnstat start
+
+CRONLINE="*/2 * * * * root /usr/bin/vnstat --update"
+grep -qF "$CRONLINE" /etc/crontabs/root || echo "$CRONLINE" >> /etc/crontabs/root
+
+exit 0

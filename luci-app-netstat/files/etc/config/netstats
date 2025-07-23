@@ -1,0 +1,4 @@
+
+config config
+	option mode 'monthly'
+	option prefer 'wwan0_1'

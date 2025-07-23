@@ -1,0 +1,110 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+
+TABLE="ttl_override"
+CHAIN="postrouting_ttl"
+
+EXTRA_COMMANDS="status"
+EXTRA_HELP="        status          Show TTL override rule status"
+
+load_config() {
+    TTL=$(uci get nftttl.ttl.value 2>/dev/null)
+    ENABLED=$(uci get nftttl.ttl.enabled 2>/dev/null)
+
+    [ -z "$TTL" ] && TTL=64
+    [ -z "$ENABLED" ] && ENABLED=1
+}
+
+get_iface() {
+    iface=$(ip route show default 2>/dev/null | awk '/default/ {print $5}' | head -n1)
+    if [ -n "$iface" ] && [ -d /sys/class/net/"$iface" ]; then
+        ip addr show dev "$iface" | grep -q 'inet ' && echo "$iface" && return
+    fi
+
+    iface=$(ubus call network.interface.wwan status 2>/dev/null | jsonfilter -e "@.device")
+    if [ -n "$iface" ]; then
+        ip addr show dev "$iface" | grep -q 'inet ' && echo "$iface" && return
+    fi
+
+    for i in wwan0_1 wwan0 wan eth1; do
+        if [ -d "/sys/class/net/$i" ] && [ "$(cat /sys/class/net/$i/operstate 2>/dev/null)" = "up" ]; then
+            ip addr show dev "$i" | grep -q 'inet ' && echo "$i" && return
+        fi
+    done
+
+    echo "wwan0_1"
+}
+
+start() {
+    load_config
+    iface=$(get_iface)
+
+    [ "$ENABLED" != "1" ] && {
+        echo "[TTL] Disabled in config (/etc/config/nftttl), stopping any active rules..."
+        stop
+        return 0
+    }
+
+    echo "[TTL] Waiting for IP on interface: $iface"
+    for i in $(seq 1 10); do
+        ip addr show dev "$iface" | grep -q 'inet ' && break
+        sleep 1
+    done
+
+    echo "[TTL] Applying TTL override on interface: $iface (TTL=$TTL)"
+
+    # IPv4
+    nft list table ip $TABLE >/dev/null 2>&1 || nft add table ip $TABLE
+    nft list chain ip $TABLE $CHAIN >/dev/null 2>&1 || \
+        nft add chain ip $TABLE $CHAIN '{ type filter hook postrouting priority mangle; policy accept; }'
+    nft list table ip $TABLE | grep -q "oifname \"$iface\" ip ttl set $TTL" || \
+        nft add rule ip $TABLE $CHAIN oifname "$iface" ip ttl set $TTL
+
+    # IPv6
+    nft list table ip6 $TABLE >/dev/null 2>&1 || nft add table ip6 $TABLE
+    nft list chain ip6 $TABLE $CHAIN >/dev/null 2>&1 || \
+        nft add chain ip6 $TABLE $CHAIN '{ type filter hook postrouting priority mangle; policy accept; }'
+    nft list table ip6 $TABLE | grep -q "oifname \"$iface\" ip6 hoplimit set $TTL" || \
+        nft add rule ip6 $TABLE $CHAIN oifname "$iface" ip6 hoplimit set $TTL
+}
+
+stop() {
+    load_config
+    iface=$(get_iface)
+    echo "[TTL] Removing TTL override from interface: $iface"
+
+    # IPv4
+    for handle in $(nft -a list chain ip $TABLE $CHAIN 2>/dev/null | awk "/oifname \\\"$iface\\\" ip ttl set $TTL/ {print \$NF}"); do
+        nft delete rule ip $TABLE $CHAIN handle $handle
+    done
+
+    # IPv6
+    for handle in $(nft -a list chain ip6 $TABLE $CHAIN 2>/dev/null | awk "/oifname \\\"$iface\\\" ip6 hoplimit set $TTL/ {print \$NF}"); do
+        nft delete rule ip6 $TABLE $CHAIN handle $handle
+    done
+
+    nft list chain ip $TABLE $CHAIN 2>/dev/null | grep -q 'handle' || nft delete chain ip $TABLE $CHAIN 2>/dev/null
+    nft list table ip $TABLE 2>/dev/null | grep -q 'chain' || nft delete table ip $TABLE 2>/dev/null
+
+    nft list chain ip6 $TABLE $CHAIN 2>/dev/null | grep -q 'handle' || nft delete chain ip6 $TABLE $CHAIN 2>/dev/null
+    nft list table ip6 $TABLE 2>/dev/null | grep -q 'chain' || nft delete table ip6 $TABLE 2>/dev/null
+}
+
+status() {
+    load_config
+    iface=$(get_iface)
+    echo "[TTL] Checking TTL rule status for: $iface"
+
+    if nft list table ip $TABLE 2>/dev/null | grep -q "oifname \"$iface\" ip ttl set $TTL"; then
+        echo "[TTL] IPv4 TTL rule active (TTL=$TTL)"
+    else
+        echo "[TTL] IPv4 TTL rule NOT found"
+    fi
+
+    if nft list table ip6 $TABLE 2>/dev/null | grep -q "oifname \"$iface\" ip6 hoplimit set $TTL"; then
+        echo "[TTL] IPv6 Hoplimit rule active (TTL=$TTL)"
+    else
+        echo "[TTL] IPv6 Hoplimit rule NOT found"
+    fi
+}

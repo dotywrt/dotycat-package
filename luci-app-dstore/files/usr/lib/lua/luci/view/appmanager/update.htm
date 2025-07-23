@@ -1,0 +1,152 @@
+<%+header%>
+<script>
+(function () {
+  function isDarkMode() {
+    const bgColor = getComputedStyle(document.body).backgroundColor;
+    if (!bgColor) return false;
+
+    const rgb = bgColor.match(/\d+/g);
+    if (!rgb) return false;
+
+    const [r, g, b] = rgb.map(Number);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128;
+  }
+
+  function loadThemeCSS() {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = isDarkMode()
+      ? '<%=resource%>/view/appmanager/all_dark.css'
+      : '<%=resource%>/view/appmanager/all.css';
+    document.head.appendChild(css);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadThemeCSS);
+  } else {
+    loadThemeCSS();
+  }
+})();
+</script>
+
+<h3 class="cbi-section-title">Updates</h3>
+
+<div id="install-dialog"
+     style="display:none; white-space:pre-wrap; background:#111; color:#0f0; padding:10px;
+            margin:20px 0; border-radius:4px;">
+</div>
+
+<div id="app-grid">
+  <p class="cbi-value-description">Checking for app updates...</p>
+</div>
+
+<script>
+'use strict';
+
+let appList = [];
+
+function normalizeVersion(v) {
+  return v.replace(/^v/, '')
+          .split(/[\.\-\_]/)
+          .map(part => /^\d+$/.test(part) ? parseInt(part, 10) : part.toLowerCase());
+}
+
+function versionGreaterThan(v1, v2) {
+  const a = normalizeVersion(v1);
+  const b = normalizeVersion(v2);
+  const len = Math.max(a.length, b.length);
+
+  for (let i = 0; i < len; i++) {
+    const x = a[i] !== undefined ? a[i] : 0;
+    const y = b[i] !== undefined ? b[i] : 0;
+
+    if (typeof x === 'number' && typeof y === 'number') {
+      if (x !== y) return x > y;
+    } else {
+      const sx = String(x);
+      const sy = String(y);
+      if (sx !== sy) return sx > sy;
+    }
+  }
+
+  return false;
+}
+
+async function loadApps() {
+  const grid = document.getElementById('app-grid');
+  grid.innerHTML = '<p class="cbi-value-description">Loading...</p>';
+
+  try {
+    const res = await fetch('<%=luci.dispatcher.build_url("admin", "services", "appmanager", "api", "list")%>');
+    appList = await res.json();
+    renderGrid();
+  } catch (e) {
+    grid.innerHTML = '<div class="cbi-section-error">Failed to load app list.<br>Check the <em>Settings</em> tab.</div>';
+    console.error(e);
+  }
+}
+
+function renderGrid() {
+  const grid = document.getElementById('app-grid');
+  grid.innerHTML = '';
+
+  const filtered = appList.filter(app => {
+    return app.installed_version && app.version &&
+           versionGreaterThan(app.version.trim(), app.installed_version.trim());
+  });
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="cbi-section-error">✅ All installed apps are up to date.</div>';
+    return;
+  }
+
+  for (const app of filtered) {
+    const tutorialURL = app.tutorial || 'https://dotycat.com';
+    const card = document.createElement('div');
+    card.className = 'app-card';
+
+    card.innerHTML = `
+      <img src="${app.avatar}" alt="${app.name}">
+      <div class="app-info">
+        <p><b>${app.name}</b> <small>${app.installed_version || '-'} → <b>${app.version || '-'}</b></small></p>
+        <div class="desc">${app.description || ''}</div>
+        <div class="footer">
+          Author: ${app.author || '-'}<br>
+          Updated: ${app.updated || '-'}
+        </div>
+        <div class="action-buttons">
+          <button class="uninstall-btn" onclick="manageApp('${app.package}', '${app.url}', 'install')">Update</button>
+          <button class="tutorial-btn" onclick="window.open('${tutorialURL}', '_blank')">Tutorial</button>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+}
+
+function manageApp(pkg, url, action) {
+  const dialog = document.getElementById('install-dialog');
+  dialog.style.display = 'block';
+  dialog.innerText = `${action === 'install' ? 'Installing' : 'Uninstalling'} ${pkg}...\n`;
+
+  const form = new FormData();
+  form.append('pkg', pkg);
+  form.append('url', url);
+  form.append('do', action);
+
+  fetch('<%=luci.dispatcher.build_url("admin", "services", "appmanager", "api", "manage")%>', {
+    method: 'POST',
+    body: form
+  })
+  .then(res => res.text())
+  .then(out => {
+    dialog.innerText += out + '\nReloading...';
+    setTimeout(loadApps, 3000);
+  });
+}
+
+window.onload = loadApps;
+</script>
+
+<%+footer%>
