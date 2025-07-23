@@ -1,3 +1,0 @@
-config ipt_ttl 'config'
-	option enabled '1'
-	option ttl '64'
