@@ -1,4 +1,0 @@
-
-config settings 'settings'
-	list json_urls 'https://raw.githubusercontent.com/dotywrt/doty_store/main/apps.json' 
-
