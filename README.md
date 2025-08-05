@@ -1,4 +1,4 @@
-# openwrt-package
+# Dotywrt Custom Package
 
 <pre>
   <code>
