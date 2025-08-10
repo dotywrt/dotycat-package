@@ -3,7 +3,7 @@ m = Map("qmodem_ttl", translate("TTL Config"))
 s = m:section(NamedSection, "main", "main", translate("Global Config"))
 
 enable = s:option(Flag, "enable", translate("Enable"))
-enable.default = "0"
+enable.default = "y"
 
 ttl = s:option(Value, "ttl", translate("TTL"))
 ttl.default = 64
