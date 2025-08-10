@@ -1,1 +1,5 @@
+
 config main 'main'
+	option enable '1'
+	option ttl '64'
+
