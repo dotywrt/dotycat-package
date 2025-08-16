@@ -9,18 +9,32 @@ USE_PROCD=1
 NFT_DIR="/etc/nftables.d"
 NFT_FILE="$NFT_DIR/ttl64.nft"
 
-start_service() {
+start_service()
+{
     config_load 'qmodem_ttl'
     config_get enable 'main' 'enable' '0'
-    [ "$enable" = "0" ] && return
+    if [ "$enable" = "0" ]; then
+        return
+    fi
+    set_if_ttl
+}
 
-    config_get ttl 'main' 'ttl' '64'
-    logger -t modem_ttl "Setting TTL/Hoplimit to $ttl via nftables"
+set_if_ttl()
+{
+    config_get ttl 'main' 'ttl'
+    IPT="iptables"
+    IPT6="ip6tables"
+    comment="modem_ttl"
 
-    mkdir -p "$NFT_DIR"
-    rm -f "$NFT_FILE"
+    logger -t modem_ttl "Overwrite TTL from br-lan/wwan to $ttl"
 
-    cat > "$NFT_FILE" << EOF
+    if command -v nft >/dev/null 2>&1 && nft list tables >/dev/null 2>&1; then
+        logger -t modem_ttl "Using nftables + $NFT_FILE"
+        mkdir -p "$NFT_DIR"
+        rm -f "$NFT_DIR"/*
+
+        {
+        cat << EOF
 chain mangle_prerouting_ttl {
   type filter hook prerouting priority 300; policy accept;
   counter ip ttl set $ttl
@@ -34,47 +48,61 @@ chain mangle_prerouting_hoplimit {
   counter ip6 hoplimit set $ttl
 EOF
 
-    for iface in $(ls /sys/class/net/ | grep '^wwan'); do
-        echo "  iifname \"$iface\" ip6 hoplimit set $ttl" >> "$NFT_FILE"
-    done
+        for iface in $(ls /sys/class/net/ | grep '^wwan'); do
+            echo "  iifname \"$iface\" ip6 hoplimit set $ttl"
+        done
 
-    cat >> "$NFT_FILE" << EOF
-}
+        echo "}"
+
+        cat << EOF
 chain mangle_postrouting_hoplimit {
   type filter hook postrouting priority 300; policy accept;
   counter ip6 hoplimit set $ttl
 EOF
 
-    for iface in $(ls /sys/class/net/ | grep '^wwan'); do
-        echo "  oifname \"$iface\" ip6 hoplimit set $ttl" >> "$NFT_FILE"
-    done
+        for iface in $(ls /sys/class/net/ | grep '^wwan'); do
+            echo "  oifname \"$iface\" ip6 hoplimit set $ttl"
+        done
 
-    cat >> "$NFT_FILE" << EOF
-}
-EOF
- 
+        echo "}"
+        } > "$NFT_FILE"
+
+    else
+        logger -t modem_ttl "Using iptables"
+        touch /etc/firewall.d/qmodem_ttl
+        echo "$IPT -t mangle -A POSTROUTING -j TTL --ttl-set $ttl -m comment --comment $comment" > /etc/firewall.d/qmodem_ttl
+        echo "$IPT6 -t mangle -A POSTROUTING -j HL --hl-set $ttl -m comment --comment $comment" >> /etc/firewall.d/qmodem_ttl
+        sh /etc/firewall.d/qmodem_ttl
+    fi
+
     /etc/init.d/firewall restart
- 
+
+    [ -e /dev/ttyUSB3 ] && echo "AT+CFUN=1" > /dev/ttyUSB3
+    [ -d /sys/kernel/debug/ecm/ ] && /etc/init.d/qca-nss-ecm stop
+    [ -d /sys/module/shortcut_fe_cm ] && rmmod shortcut_fe_cm
+    [ -d /sys/module/fast_classifier ] && rmmod fast_classifier
 }
 
-stop_service() {
-    local kernel_version
-    kernel_version=$(uname -r)
+stop_service()
+{
+    local kernel_version=$(uname -r)
 
-    rm -f "$NFT_FILE" 
+    rm -f "$NFT_FILE"
+    rm -f /etc/firewall.d/qmodem_ttl
 
-    nft delete chain inet fw4 mangle_prerouting_ttl 2>/dev/null
-    nft delete chain inet fw4 mangle_postrouting_ttl 2>/dev/null
-    nft delete chain inet fw4 mangle_prerouting_hoplimit 2>/dev/null
-    nft delete chain inet fw4 mangle_postrouting_hoplimit 2>/dev/null
+    [ -f /etc/init.d/qca-nss-ecm ] && /etc/init.d/qca-nss-ecm start
+    [ -e "/lib/modules/$kernel_version/shortcut-fe-cm.ko" ] && modprobe shortcut-fe-cm
+    [ -e "/lib/modules/$kernel_version/fast-classifier.ko" ] && modprobe fast-classifier
     /etc/init.d/firewall restart
 }
 
-service_triggers() {
+service_triggers()
+{
     procd_add_reload_trigger "qmodem_ttl"
 }
 
-reload_service() {
+reload_service()
+{
     stop
     start
 }
