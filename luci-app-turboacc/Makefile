@@ -29,7 +29,8 @@ LUCI_PKGARCH:=all
 define Package/$(PKG_NAME)/config
 config PACKAGE_$(PKG_NAME)_INCLUDE_OFFLOADING
 	bool "Include Flow Offload"
-	default y if !(TARGET_ipq60xx||TARGET_ipq806x||TARGET_ipq807x||TARGET_qualcommax)
+	# Disable by default on all targets
+	default n
 
 config PACKAGE_$(PKG_NAME)_INCLUDE_BBR_CCA
 	bool "Include BBR CCA"
@@ -41,4 +42,3 @@ config PACKAGE_$(PKG_NAME)_INCLUDE_NFT_FULLCONE
 endef
 
 include $(TOPDIR)/feeds/luci/luci.mk
-
