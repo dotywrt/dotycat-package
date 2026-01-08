@@ -14,7 +14,7 @@ elif echo "$usbd" | grep -q "Driver=cdc_mbim"; then
 elif echo "$usbd" | grep -q "Driver=cdc_ether"; then
     protocol="ecm"
 elif [ -d /sys/bus/mhi/devices ]; then
-    protocol="MHI OVER PCIE"
+    protocol="MHI"
 else
     protocol="unknown"
 fi
