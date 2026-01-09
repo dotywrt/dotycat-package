@@ -55,7 +55,6 @@ function get_ports_info()
     luci.http.write_json({ports = available_ports, default_port = saved_comm})
 end
 
-
 function save_port()
     local uci = require "luci.model.uci".cursor()
     local http = require "luci.http"
@@ -148,4 +147,3 @@ function get_modem_info()
     luci.http.prepare_content("application/json")
     luci.http.write_json(modeminfo)
 end
-
