@@ -26,8 +26,8 @@ jobs:
       - name: Clone OpenClash repo (shallow)
         run: git clone --depth=1 https://github.com/vernesong/OpenClash.git openclash
         
-      # - name: Update Pakages (shallow)
-      #  run: git clone https://github.com/xiaorouji/openwrt-passwall-packages.git packages
+      - name: Update modemband (shallow)
+        run: git clone https://github.com/4IceG/luci-app-modemband.git
 
       - name: Create or switch to 'luci_app' branch
         run: |
@@ -44,9 +44,9 @@ jobs:
           rm -rf luci-app-openclash
           cp -r openclash/luci-app-openclash ./luci-app-openclash
 
-      # - name: Copy Passwall Packages
-      #  run: |
-      #    cp -rf packages/* ./
+      - name: Copy Passwall Packages
+        run: |
+      #   cp -rf packages/* ./
 
       - name: Cleanup
         run: rm -rf passwall2 openclash
