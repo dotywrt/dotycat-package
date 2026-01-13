@@ -9,436 +9,493 @@
 'require tools.widgets as widgets';
 
 /*
-	Copyright 2022-2024 Rafał Wabik - IceG - From eko.one.pl forum
+    Copyright 2022-2025 Rafał Wabik - IceG - From eko.one.pl forum
 */
 
+let CBISelectswitch = form.DummyValue.extend({
+    renderWidget: function (section_id, option_id, cfgvalue) {
+        let section = this.section;
 
-var CBISelectswitch = form.DummyValue.extend({                                                                                         
-    renderWidget: function(section_id, option_id, cfgvalue) {                                                                          
-        var section = this.section;                                                                                                    
-        return E([], [                                                                                                                 
-            E('span', { 'class': 'control-group' }, [                                                                                  
-                E('button', {                                                                                                          
-                    'class': 'cbi-button cbi-button-apply',                                                                            
-                    'click': ui.createHandlerFn(this, function() {                                                                     
-                        var dropdown = section.getUIElement(section_id, 'set_5gsabands');                                              
-                        dropdown.setValue([]);                                                                                         
-                    }),                                                                                                                
-                }, _('Deselect all')),                                                                                                 
-                ' ',                                                                                                                   
-                E('button', {                                                                                                          
-                    'class': 'cbi-button cbi-button-action important',                                                                 
-                    'click': ui.createHandlerFn(this, function() {                                                                     
-                        var dropdown = section.getUIElement(section_id, 'set_5gsabands');                                              
-                        dropdown.setValue(Object.keys(dropdown.choices));                                                              
-                    })                                                                                                                 
-                }, _('Select all'))                                                                                                    
-            ])                                                                                                                         
-        ]);                                                                                                                            
-    },                                                                                                                                 
+        return E([], [
+            E('span', { 'class': 'control-group' }, [
+                E('button', {
+                    'class': 'cbi-button cbi-button-apply',
+                    'click': ui.createHandlerFn(this, function () {
+                        let dropdown = section.getUIElement(section_id, 'set_5gsabands');
+                        dropdown && dropdown.setValue([]);
+                    }),
+                }, _('Deselect all')),
+                ' ',
+                E('button', {
+                    'class': 'cbi-button cbi-button-action important',
+                    'click': ui.createHandlerFn(this, function () {
+                        let dropdown = section.getUIElement(section_id, 'set_5gsabands');
+                        if (!dropdown) return;
+                        let all = Object.keys(dropdown.choices || {});
+                        dropdown.setValue(all);
+                    })
+                }, _('Select all'))
+            ])
+        ]);
+    },
 });
 
+let BANDmagic = form.DummyValue.extend({
+    load: function () {
+        let restoreButton = E('button', {
+            'class': 'btn cbi-button cbi-button-reset',
+            'click': ui.createHandlerFn(this, function () {
+                return handleAction('resetbandz');
+            }),
+        }, _('Restore'));
 
-var BANDmagic = form.DummyValue.extend({
-
-	load: function() {
-		var setupButton = E('button', {
-				'class': 'cbi-button cbi-button-neutral',
-				'click': ui.createHandlerFn(this, function() {
-							return handleAction('reload');
-						}),
-			}, _('Refresh'));
-
-		var restoreButton = E('button', {
-				'class': 'btn cbi-button cbi-button-reset',
-				'click': ui.createHandlerFn(this, function() {
-							return handleAction('resetbandz');
-						}),
-			}, _('Restore'));
-
-		return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh'), 'null').then(L.bind(function(html) {
-				if (html == null) {
-					this.default = E('em', {}, [ _('The modemband error.') ]);
-				}
-				else {
-					this.default = E([
-					E('div', { 'class': 'cbi-value' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_('Bands configuration')
-						),
-						E('div', { 'class': 'cbi-value-field', 'style': 'width:25vw' },
-								E('div', { 'class': 'cbi-section-node' }, [
-									setupButton,
-								]),
-						),
-					]),
-					E('div', { 'class': 'cbi-value' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_('Restore default bands')
-						),
-						E('div', { 'class': 'cbi-value-field', 'style': 'width:25vw' },
-								E('div', { 'class': 'cbi-section-node' }, [
-									restoreButton,
-								]),
-						),
-					]),
-				]);
-					}
-			}, this));
-	}
+        return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh'), 'null')
+            .then(L.bind(function (html) {
+                if (html == null) {
+                    this.default = E('em', {}, [_('The modemband error.')]);
+                }
+                else {
+                    this.default = E([
+                        E('div', { 'class': 'cbi-value' }, [
+                            E('label', { 'class': 'cbi-value-title' }, _('Restore default bands')),
+                            E('div', { 'class': 'cbi-value-field', 'style': 'width:25vw' },
+                                E('div', { 'class': 'cbi-section-node' }, [
+                                    restoreButton,
+                                ]),
+                            ),
+                        ]),
+                    ]);
+                }
+            }, this));
+    }
 });
 
-var SYSTmagic = form.DummyValue.extend({
+let cbiRichListValue = form.ListValue.extend({
+    renderWidget: function (section_id, option_index, cfgvalue) {
+        let choices = this.transformChoices();
+        let widget = new ui.Dropdown(
+            (cfgvalue != null) ? cfgvalue : this.default,
+            choices,
+            {
+                id: this.cbid(section_id),
+                sort: this.keylist,
+                optional: true,
+                multiple: true,
+                display_items: 5,
+                dropdown_items: 10,
+                select_placeholder: this.select_placeholder || this.placeholder,
+                custom_placeholder: this.custom_placeholder || this.placeholder,
+                validate: L.bind(this.validate, this, section_id),
+                disabled: (this.readonly != null) ? this.readonly : this.map.readonly
+            }
+        );
 
-	load: function() {
-		var restartButton = E('button', {
-				'class': 'btn cbi-button cbi-button-neutral',
-				'click': ui.createHandlerFn(this, function() {
-							return handleAction('restartwan');
-						}),
-			}, _('Restart'));
+        if (this.option === 'set_5gsabands')
+            window.__set5gsaBandsDropdown = widget;
 
-		var rebootButton = E('button', {
-				'class': 'btn cbi-button cbi-button-neutral',
-				'click': ui.createHandlerFn(this, function() {
-							return handleAction('rebootdev');
-						}),
-			}, _('Perform reboot'));
+        return widget.render();
+    },
 
-		return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh'), 'null').then(L.bind(function(html) {
-				if (html == null) {
-					this.default = E('em', {}, [ _('The modemband error.') ]);
-				}
-				else {
-					this.default = E([
-					E('div', { 'class': 'cbi-value' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_('Restart WAN')
-						),
-						E('div', { 'class': 'cbi-value-field', 'style': 'width:25vw' },
-								E('div', { 'class': 'cbi-section-node' }, [
-									restartButton,
-								]),
-						),
-					]),
-					E('div', { 'class': 'cbi-value' }, [
-						E('label', { 'class': 'cbi-value-title' },
-							_('Reboot')
-						),
-						E('div', { 'class': 'cbi-value-field', 'style': 'width:25vw' },
-								E('div', { 'class': 'cbi-section-node' }, [
-									rebootButton,
-								]),
-						),
-					]),
-
-				]);
-					}
-			}, this));
-	}
+    value: function (value, title, description) {
+        if (description) {
+            form.ListValue.prototype.value.call(this, value,
+                E([], [
+                    E('span', { 'class': 'hide-open' }, [title]),
+                    E('div', { 'class': 'hide-close', 'style': 'min-width:25vw' }, [
+                        E('strong', [title]),
+                        E('br'),
+                        E('span', { 'style': 'white-space:normal' }, description)
+                    ])
+                ])
+            );
+        }
+        else {
+            form.ListValue.prototype.value.call(this, value, title);
+        }
+    }
 });
 
-
-var cbiRichListValue = form.ListValue.extend({
-	renderWidget: function(section_id, option_index, cfgvalue) {
-		var choices = this.transformChoices();
-		var widget = new ui.Dropdown((cfgvalue != null) ? cfgvalue : this.default, choices, {
-			id: this.cbid(section_id),
-			sort: this.keylist,
-			optional: true,
-			multiple: true,
-			display_items: 5,
-			dropdown_items: 10,
-			select_placeholder: this.select_placeholder || this.placeholder,
-			custom_placeholder: this.custom_placeholder || this.placeholder,
-			validate: L.bind(this.validate, this, section_id),
-			disabled: (this.readonly != null) ? this.readonly : this.map.readonly
-		});
-		return widget.render();
-	},
-
-	value: function(value, title, description) {
-		if (description) {
-			form.ListValue.prototype.value.call(this, value, E([], [
-				E('span', { 'class': 'hide-open' }, [ title ]),
-				E('div', { 'class': 'hide-close', 'style': 'min-width:25vw' }, [
-					E('strong', [ title ]),
-					E('br'),
-					E('span', { 'style': 'white-space:normal' }, description)
-				])
-			]));
-		}
-		else {
-			form.ListValue.prototype.value.call(this, value, title);
-		}
-	}
-});
-
-function handleAction(ev) {
-	if (ev === 'reload') {
-		location.reload();
-	}
-	if (ev === 'resetbandz') {		
-		if (confirm(_('Do you really want to set up all possible bands for the modem?')))
-			{
-			fs.exec_direct('/usr/bin/modemband.sh', [ 'setbands5gsa', 'default' ]);
-
-			return uci.load('modemband').then(function() {
-				var nuser = (uci.get('modemband', '@modemband[0]', 'notify'));
-				
-				if ( nuser != '1' || nuser == null ) {
-				ui.addNotification(null, E('p', _('The new bands settings have been sent to the modem. If the changes are not visible, a restart of the connection, modem or router may be required.')), 'info');
-				}
-    			});
-			}
-	}
-	if (ev === 'rebootdev') {
-		if (confirm(_('Do you really want to restart the device?')))
-		{
-			L.ui.showModal(_('Rebooting…'), [
-				E('p', { 'class': 'spinning' }, _('Waiting for device...'))
-			]);
-			fs.exec('/sbin/reboot');
-		}
-	}
-	if (ev === 'restartwan') {
-		return uci.load('modemband').then(function() {
-		var wname = (uci.get('modemband', '@modemband[0]', 'iface'));
-		
-			if (wname.includes('@')) {
-				wname = wname.replace(/@/g, '')
-			};
-
-			fs.exec('/sbin/ifdown', [ wname ]);
-			fs.exec('sleep 3');
-			fs.exec('/sbin/ifup', [ wname ]);
-    		});
-	}
+function pop(a, message, severity) {
+    ui.addNotification(a, message, severity);
 }
 
+function popTimeout(a, message, timeout, severity) {
+    ui.addTimeLimitedNotification(a, message, timeout, severity);
+}
+
+function handleAction(ev) {
+    if (ev === 'reload') {
+        location.reload();
+    }
+    if (ev === 'resetbandz') {
+        if (confirm(_('Do you really want to set up all possible bands for the modem?'))) {
+            fs.exec_direct('/usr/bin/modemband.sh', ['setbands5gsa', 'default']);
+            popTimeout(null, E('p', _('The new bands settings have been sent to the modem. If the changes are not visible, a restart of the connection, modem or router may be required.')), 5000, 'info');
+        }
+    }
+}
+
+function updateTileColorsFromEnabled5gsa(enabledArray) {
+    try {
+        let enabledNs = new Set(
+            (enabledArray || [])
+                .map(function (v) {
+                    let m = v.toString().match(/\d+$/);
+                    return m ? ('n' + m[0]) : null;
+                })
+                .filter(Boolean)
+        );
+
+        let grid = document.getElementById('bands-grid');
+        if (!grid) return;
+
+        grid.querySelectorAll('[data-band]').forEach(function (node) {
+            let key = node.getAttribute('data-band');
+            let isOn = enabledNs.has(key);
+
+            node.classList.add('band-tile');
+            node.classList.toggle('band-tile--on',  !!isOn);
+            node.classList.toggle('band-tile--off', !isOn);
+
+            node.style.backgroundColor = '';
+            node.style.color = '';
+        });
+    } catch (e) {}
+}
+
+function isValid5gData(json) {
+    return json &&
+           json.supported5gsa &&
+           Array.isArray(json.supported5gsa) &&
+           json.supported5gsa.length > 0 &&
+           json.enabled5gsa &&
+           Array.isArray(json.enabled5gsa);
+}
+
+let pollId;
+
 return view.extend({
-	formdata: { modemband: {} },
+    formdata: { modemband: {} },
+    isModemSupported: true,
 
-	load: function() {
-		return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh', [ 'json' ]));
-	},
+    addStyles: function () {
+        const style = document.createElement('style');
+        style.type = 'text/css';
+        style.textContent = `
+        :root {
+          --tile-on-bg: #34c759;              /* ON */
+          --tile-off-bg: #7f8c8d;             /* OFF */
+          --tile-text: #ffffff;
+          --tile-on-ring: #34c759;
+          --tile-off-ring: #7f8c8d;
+          --tile-shadow: 0 1px 2px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.25);
+        }
+        :root[data-darkmode="true"] {
+          --tile-on-bg: rgba(46, 204, 113, 0.22);   /* ON */
+          --tile-off-bg: rgba(255, 255, 255, 0.08); /* OFF */
+          --tile-text: #e5e7eb;
+          --tile-on-ring: #2ecc71;
+          --tile-off-ring: rgba(255,255,255,.28);
+          --tile-shadow: 0 1px 2px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.22);
+        }
+        .band-tile {
+          background-color: var(--tile-off-bg);
+          color: var(--tile-text);
+          border: 1px solid var(--tile-off-ring);
+          box-shadow: var(--tile-shadow);
+          font-weight: 600;
+          text-align: center;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          text-shadow: 0 1px 2px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.25);
+          user-select: none;
+        }
+        .band-tile.band-tile--on  { background-color: var(--tile-on-bg);  border-color: var(--tile-on-ring); }
+        .band-tile.band-tile--off { background-color: var(--tile-off-bg); border-color: var(--tile-off-ring); }
+        `;
+        document.head.appendChild(style);
+    },
 
-	render: function(data) {
-		var m, s, o;
+    load: function () {
+        return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh', ['json']));
+    },
 
-		if (data != null){
-		try {
+    renderErrorMessage: function(title, message, forumUrl) {
+        let container = E('div', { 'class': 'cbi-map' }, [
+            E('h2', { 'name': 'content' }, _('5G SA Bands Configuration')),
+            E('div', { 'class': 'cbi-section' }, [
+                E('div', { 'class': 'cbi-section-node' }, [
+                    E('div', {
+                        'class': 'alert-message warning',
+                        'style': 'padding: 15px; margin: 15px 0; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px;'
+                    }, [
+                        E('h4', { 'style': 'margin-top: 0; color: #856404;' }, [
+                            E('strong', {}, title)
+                        ]),
+                        E('p', { 'style': 'margin-bottom: 10px; color: #856404;' }, message),
+                        E('p', { 'style': 'margin-bottom: 0; color: #856404;' }, [
+                            _('More information about the modemband application on the')+' ',
+                            E('a', {
+                                'href': forumUrl,
+                                'target': '_blank',
+                                'style': 'color: #0056b3; text-decoration: underline;'
+                            }, _('eko.one.pl forum')),
+                            '.'
+                        ])
+                    ])
+                ])
+            ])
+        ]);
 
-		var json = JSON.parse(data);
-		var modemen, sbands;
+        return container;
+    },
 
-		if(!json.hasOwnProperty('error')){
+    render: function (data) {
+        this.addStyles();
 
-		if (json.supported5gsa === undefined && json.enabled5gsa === undefined) {
+        let json = null;
 
-			ui.addNotification(null, E('p', _('5G bands cannot be read. Check if your modem supports this technology and if it is in the list of supported modems.')), 'info');
-			modemen = '-';
-			sbands = '-';
-		}
-		else {
+        if (data != null && typeof data === 'string' && data.includes('No supported modem was found')) {
+            this.isModemSupported = false;
+            return this.renderErrorMessage(
+                _('Unsupported Modem'),
+                _('No supported modem was found. Check if your modem supports this technology and if it is in the list of supported modems.'),
+                'https://eko.one.pl/?p=openwrt-modemband'
+            );
+        }
 
-		var modem = json.modem;
-		for (var i = 0; i < json.enabled5gsa.length; i++) 
-		{
-				var txtband = json.enabled5gsa[i].toString();
-				var numb = txtband.match(/\d+$/);
-				modemen += 'n' + numb + '  ';
-				modemen = modemen.replace('undefined', '');
-		}
-		modemen = modemen.includes('n0') == true ? modemen = _('Bands are disabled...') : modemen = modemen.trim();
+        if (data != null) {
+            try {
+                json = JSON.parse(data);
+            } catch (err) {
+                this.isModemSupported = false;
+                return this.renderErrorMessage(
+                    _('Configuration Error'),
+                    _('5G bands cannot be read. Check if your modem supports this technology and if it is in the list of supported modems.'),
+                    'https://eko.one.pl/?p=openwrt-modemband'
+                );
+            }
+        }
 
-		for (var i = 0; i < json.supported5gsa.length; i++) 
-		{
-				var txtband = json.supported5gsa[i].band.toString();
-				var numb = txtband.match(/\d+$/);
-				sbands += 'n' + numb + '  ';
-				sbands = sbands.replace('undefined', '');
-		}
-		sbands = sbands.trim();
-		
-		pollData: poll.add(function() {
-			return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh', [ 'json' ]))
-			.then(function(res) {
-				var json = JSON.parse(res);
-				//modemen = _('Waiting for device...');
-				if ( json != null ) { 
+        if (!isValid5gData(json)) {
+            this.isModemSupported = false;
+            return this.renderErrorMessage(
+                _('Configuration Error'),
+                _('5G bands cannot be read. Check if your modem supports this technology and if it is in the list of supported modems.'),
+                'https://eko.one.pl/?p=openwrt-modemband'
+            );
+        }
 
-				var renderHTML = "";
-				var view = document.getElementById("modemlteb");
-				for (var i = 0; i < json.enabled5gsa.length; i++) 
-				{
-				var txtband = json.enabled5gsa[i].toString();
-				var numb = txtband.match(/\d+$/);
-				renderHTML += 'n' + numb + '  ';
-				view.innerHTML  = '';
-  				view.innerHTML  = renderHTML.trim();
-				}
-				view.innerHTML = view.innerHTML.includes('n0') == true ? view.innerHTML = _('Bands are disabled...') : view.innerHTML  = renderHTML.trim();
-				}
-				else {
-				var view = document.getElementById("modemlteb");
-				view.innerHTML = _('Waiting for device...');
-				}
+        this.isModemSupported = true;
 
-			});
-		});
-		}
-		}		
-		else {
-			if (json.error.includes('No supported') == true) {
-			modemen = '-';
-			sbands = '-';
-			ui.addNotification(null, E('p', _('No supported modem was found, quitting...')), 'error');
-			}
-			if (json.error.includes('Port not found') == true) {
-			modemen = '-';
-			sbands = '-';
-			ui.addNotification(null, E('p', _('Port not found, quitting...')), 'error');
-			}
+        let m, s, o;
 
-		}
-			} catch (err) {
-  				console.log('Error: ', err.message);
-			}
-		}		
+        let info = _('Configuration modem frequency bands. More information about the modemband application on the %seko.one.pl forum%s.')
+            .format('<a href="https://eko.one.pl/?p=openwrt-modemband" target="_blank">', '</a>');
 
-		var info = _('Configuration modem frequency bands. More information about the modemband application on the %seko.one.pl forum%s.').format('<a href="https://eko.one.pl/?p=openwrt-modemband" target="_blank">', '</a>');
+        m = new form.JSONMap(this.formdata, _('5G SA Bands Configuration'), info);
 
-		m = new form.JSONMap(this.formdata, _('5G SA Bands Configuration'), info);
+        s = m.section(form.TypedSection, 'modemband', '', _(''));
+        s.anonymous = true;
+        s.render = L.bind(function (view, section_id) {
+            const TILE_W = 50, TILE_H = 25, RADIUS = 4;
 
-		s = m.section(form.TypedSection, 'modemband', '', _(''));
-		s.anonymous = true;
+            let modemContainer = E('div', {
+                'class': 'ifacebox',
+                'style': 'margin:.25em;width:100%;text-align:center;'
+            }, [
+                E('div', {
+                    'id': 'modem-title',
+                    'class': 'ifacebox-head',
+                    'style': 'font-weight:bold;background:#f8f8f8;padding:8px'
+                }, [json.modem || '-']),
+            ]);
 
-		s.render = L.bind(function(view, section_id) {
-			return E('div', { 'class': 'cbi-section' }, [
-				E('h3', _('Modem information')),
-					E('table', { 'class': 'table' }, [
-						E('tr', { 'class': 'tr' }, [
-						E('td', { 'class': 'td left', 'width': '33%' }, [ _('Modem')]),
-						E('td', { 'class': 'td left', 'id': 'modem' }, [ modem || '-' ]),
-					]),
+            let blockWrap = E('div', { 'style': 'margin-inline:20px;' });
 
-						E('tr', { 'class': 'tr' }, [
-						E('td', { 'class': 'td left', 'width': '33%' }, [ _('Currently set 5G SA bands')]),
-						E('td', { 'class': 'td left', 'id': 'modemlteb' }, [ modemen || '-' ]),
-					]),
+            let container = E('div', {
+                'id': 'bands-grid',
+                'style':
+                    'display:grid;' +
+                    'grid-template-columns:repeat(auto-fill, ' + TILE_W + 'px);' +
+                    'grid-auto-rows:' + TILE_H + 'px;' +
+                    'justify-content:flex-start;' +
+                    'gap:6px;' +
+                    'margin-top:10px;padding:10px;margin-bottom:10px;'
+            });
 
-						E('tr', { 'class': 'tr' }, [
-						E('td', { 'class': 'td left', 'width': '33%' }, [ _('Supported 5G SA bands')]),
-						E('td', { 'class': 'td left', 'id': 'sbands' }, [ sbands || '-' ]),
-					]),
-				])
-			]);
-		}, o, this);
+            (json.supported5gsa || []).forEach(function (supported) {
+                let band = supported.band.toString();
+                let numb = band.match(/\d+$/);
+                let bandName = 'n' + (numb ? numb[0] : band);
+                let isEnabled = (json.enabled5gsa || []).includes(supported.band);
 
-		s = m.section(form.TypedSection, 'modemband', _(''));
-		s.anonymous = true;
-		s.addremove = false;
+                let bandDiv = E('div', {
+                    'data-band': bandName,
+                    'class': 'band-tile ' + (isEnabled ? 'band-tile--on' : 'band-tile--off'),
+                    'style':
+                        'width:' + TILE_W + 'px;min-width:' + TILE_W + 'px;max-width:' + TILE_W + 'px;' +
+                        'height:' + TILE_H + 'px;min-height:' + TILE_H + 'px;max-height:' + TILE_H + 'px;' +
+                        'border-radius:' + RADIUS + 'px;'
+                }, [bandName]);
 
-		if (json.supported5gsa === undefined && json.enabled5gsa === undefined) {
-			modemen = '-';
-			sbands = '-';
-		}
-		else {
+                container.appendChild(bandDiv);
+            });
 
-		s.tab('bandset', _('Preferred bands settings'));
- 
-		o = s.taboption('bandset', cbiRichListValue, 'set_5gsabands',
-		_('Modification of the bands'), 
-		_("Select the preferred band(s) for the modem."));
-		for (var i = 0; i < json.supported5gsa.length; i++) 
-		{
-			o.value(json.supported5gsa[i].band, _('n')+json.supported5gsa[i].band,json.supported5gsa[i].txt);
-		}
-		
-		o.multiple = true;
-		o.placeholder = _('Please select a band(s)');
-		o.cfgvalue = function(section_id) {
-			return L.toArray((json.enabled5gsa).join(' '));
-		};
+            let legend = E('div', {
+                'style': 'display:flex;flex-direction:column;align-items:flex-start;' +
+                    'gap:8px;margin-left:12px;margin-top:10px;margin-bottom:14px;'
+            }, [
+                E('div', { 'style': 'display:flex;align-items:center;gap:10px;' }, [
+                    E('div', {
+                        'class': 'band-tile band-tile--on',
+                        'style':
+                            'width:' + TILE_W + 'px;min-width:' + TILE_W + 'px;max-width:' + TILE_W + 'px;' +
+                            'height:' + TILE_H + 'px;min-height:' + TILE_H + 'px;max-height:' + TILE_H + 'px;' +
+                            'border-radius:' + RADIUS + 'px;'
+                    }, ['\xa0']),
+                    E('label', {}, _('Currently set 5G SA bands'))
+                ]),
+                E('div', { 'style': 'display:flex;align-items:center;gap:10px;' }, [
+                    E('div', {
+                        'class': 'band-tile band-tile--off',
+                        'style':
+                            'width:' + TILE_W + 'px;min-width:' + TILE_W + 'px;max-width:' + TILE_W + 'px;' +
+                            'height:' + TILE_H + 'px;min-height:' + TILE_H + 'px;max-height:' + TILE_H + 'px;' +
+                            'border-radius:' + RADIUS + 'px;'
+                    }, ['\xa0']),
+                    E('label', {}, _('Supported 5G SA bands'))
+                ])
+            ]);
 
-		o = s.taboption('bandset', CBISelectswitch, '_switch', _('Band selection switch'));
+            blockWrap.appendChild(container);
+            blockWrap.appendChild(legend);
+            modemContainer.appendChild(blockWrap);
+            return modemContainer;
+        }, o, this);
 
-		s = m.section(form.TypedSection);
-		s.anonymous = true;
-		o = s.option(BANDmagic);
+        s = m.section(form.TypedSection, 'modemband', _(''));
+        s.anonymous = true;
+        s.addremove = false;
 
-		s = m.section(form.TypedSection, 'modemband',
-			_('Additional options'),
-			_('Additional options useful for modem configuration.'));
+        s.tab('bandset', _('Preferred bands settings'));
 
-		s.tab('opt1', _('Connection / router restart'));
-		s.anonymous = true;
+        let bandList = s.taboption('bandset', cbiRichListValue, 'set_5gsabands',
+            _('Modification of the bands'),
+            _("Select the preferred band(s) for the modem.")
+        );
 
-		o = s.taboption('opt1', form.DummyValue, '_dummy');
-			o.rawhtml = true;
-			o.default = '<div class="cbi-section-descr">' +
-				_('Hint: The name of the WAN section can be changed in the package settings panel.') +
-				'</div>';
+        (json.supported5gsa || []).forEach(function (band) {
+            bandList.value(band.band, _('n') + band.band, band.txt);
+        });
 
-		o = s.taboption('opt1', SYSTmagic);
-		}
-		
-		return m.render();
-	},
+        bandList.multiple = true;
+        bandList.placeholder = _('Please select a band(s)');
+        bandList.cfgvalue = function (section_id) {
+            return L.toArray((json.enabled5gsa || []).join(' '));
+        };
 
-	handleBANDZSETup: function(ev) {
-		var map = document.querySelector('#maincontent .cbi-map'),
-		    data = this.formdata;
+        s.taboption('bandset', CBISelectswitch, '_switch', _('Band selection switch'));
 
-		return dom.callClassMethod(map, 'save').then(function() {
-			var args = [];
-			args.push(data.modemband.set_5gsabands);
-			var ax = args.toString();
-			ax = ax.replace(/,/g, ' ')
-			
-			ax.length >= 1 ? fs.exec_direct('/usr/bin/modemband.sh', [ 'setbands5gsa', ax ]) : ui.addNotification(null, E('p', _('Check if you have selected the bands correctly.')), 'info');
+        let bfresh = s.taboption('bandset', form.Button, '_refreshbands');
+        bfresh.title = _('Bands configuration');
+        bfresh.inputtitle = _('Refresh');
+        bfresh.onclick = function () { location.reload(); };
 
-			return uci.load('modemband').then(function() {
-				var wrestart = (uci.get('modemband', '@modemband[0]', 'wanrestart'));
-				var mrestart = (uci.get('modemband', '@modemband[0]', 'modemrestart'));
-				var cmdrestart = (uci.get('modemband', '@modemband[0]', 'restartcmd'));
-				var wname = (uci.get('modemband', '@modemband[0]', 'iface'));
-				
-				if (wname.includes('@')) {
-					wname = wname.replace(/@/g, '')
-				};
-				
-				var sport = (uci.get('modemband', '@modemband[0]', 'set_port'));
-				var nuser = (uci.get('modemband', '@modemband[0]', 'notify'));
-				
-				if ( ax.length >= 1 ) {
-					if ( nuser != '1' || nuser == null ) {
-					ui.addNotification(null, E('p', _('The new bands settings have been sent to the modem. If the changes are not visible, a restart of the connection, modem or router may be required.')), 'info');
-					}
-				}
-				
-				if (wrestart == '1') {
-				fs.exec('/sbin/ifdown', [ wname ]);
-				fs.exec('sleep 3');
-				fs.exec('/sbin/ifup', [ wname ]);
-				}
+        let s2 = m.section(form.TypedSection);
+        s2.anonymous = true;
+        s2.option(BANDmagic);
 
-				if (mrestart == '1') {
-				fs.exec('sleep 20');
-				//sms_tool -d $_DEVICE at "cmd"
-				fs.exec_direct('/usr/bin/sms_tool', [ '-d' , sport , 'at' , cmdrestart ]);
-				}
-    			});
-		});
-	},
+        pollId = poll.add(function () {
+            return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh', ['json'])).then(function (res) {
+                try {
+                    let data = JSON.parse(res || '{}');
+                    let head = document.getElementById('modem-title');
+                    if (head) head.textContent = (data.modem || '-');
+                    updateTileColorsFromEnabled5gsa(data.enabled5gsa || []);
+                } catch (e) {}
+            });
+        });
 
-	addFooter: function() {
-		return E('div', { 'class': 'cbi-page-actions' }, [
-			E('button', {
-				'class': 'cbi-button cbi-button-save',
-				'click': L.ui.createHandlerFn(this, 'handleBANDZSETup')
-			}, [ _('Apply changes') ])
-		]);
-	}
+        return m.render();
+    },
+
+    handleBANDZSETup: function (ev) {
+        poll.stop();
+
+        let map = document.querySelector('#maincontent .cbi-map'),
+            data = this.formdata;
+
+        return dom.callClassMethod(map, 'save')
+            .then(function () {
+                let args = [];
+                args.push(data.modemband.set_5gsabands);
+
+                let ax = args.toString().replace(/,/g, ' ').trim();
+
+                try {
+                    if (window.__set5gsaBandsDropdown && typeof window.__set5gsaBandsDropdown.setValue === 'function') {
+                        let picked = ax.length ? ax.split(/\s+/) : [];
+                        window.__set5gsaBandsDropdown.setValue(picked);
+                    }
+                } catch (e) {}
+
+                if (ax.length >= 1) {
+                    fs.exec_direct('/usr/bin/modemband.sh', ['setbands5gsa', ax]);
+                    popTimeout(null, E('p', _('The new bands settings have been sent to the modem. If the changes are not visible, a restart of the connection, modem or router may be required.')), 5000, 'info');
+                    
+                    return uci.load('modemband').then(function() {
+                        try {
+                            var wrestart = (uci.get('modemband', '@modemband[0]', 'wanrestart'));
+                            var mrestart = (uci.get('modemband', '@modemband[0]', 'modemrestart'));
+                            var cmdrestart = (uci.get('modemband', '@modemband[0]', 'restartcmd'));
+                            var wname = (uci.get('modemband', '@modemband[0]', 'iface'));
+                            var sport = (uci.get('modemband', '@modemband[0]', 'set_port'));
+                            
+                            if (wrestart == '1') {
+                                fs.exec('/sbin/ifdown', [ wname ]);
+                                fs.exec('sleep 3');
+                                fs.exec('/sbin/ifup', [ wname ]);
+                            }
+
+                            if (mrestart == '1') {
+                                fs.exec('sleep 20');
+                                fs.exec_direct('/usr/bin/sms_tool', [ '-d' , sport , 'at' , cmdrestart ]);
+                            }
+                        } catch (e) {}
+                    });
+
+                } else {
+                    ui.addNotification(null, E('p', _('Check if you have selected the bands correctly.')), 'info');
+                }
+
+                return L.resolveDefault(fs.exec_direct('/usr/bin/modemband.sh', ['json'])).then(function (res) {
+                    try {
+                        let fresh = JSON.parse(res || '{}');
+                        let head = document.getElementById('modem-title');
+                        if (head) head.textContent = (fresh.modem || '-');
+                        updateTileColorsFromEnabled5gsa(fresh.enabled5gsa || []);
+
+                        if (window.__set5gsaBandsDropdown) {
+                            let current = (fresh.enabled5gsa || []).map(String);
+                            window.__set5gsaBandsDropdown.setValue(current);
+                        }
+                    } catch (e) {}
+                });
+            })
+            .finally(function () {
+                poll.start();
+            });
+    },
+
+    addFooter: function () {
+        if (!this.isModemSupported) {
+            return null;
+        }
+        return E('div', { 'class': 'cbi-page-actions' }, [
+            E('button', { 'class': 'cbi-button cbi-button-save', 'click': L.ui.createHandlerFn(this, 'handleBANDZSETup') },
+                [_('Apply changes')])
+        ]);
+    }
 });
