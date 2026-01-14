@@ -1,0 +1,14 @@
+{
+	"admin/system/rtawrt-config": {
+		"title": "RTAWRT Theme Config",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "rtawrt-config"
+		},
+		"depends": {
+			"acl": [ "luci-theme-rtawrt-config" ],
+			"uci": { "rtawrt": true }
+		}
+	}
+}
