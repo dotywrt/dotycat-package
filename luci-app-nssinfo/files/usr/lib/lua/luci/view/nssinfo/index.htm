@@ -1,0 +1,581 @@
+<%+header%>
+
+<div class="terminal-container">
+    <div class="terminal-box">
+        <h2>NSS Info</h2>
+        <div class="info-grid">
+            <% if nss_diag and nss_diag ~= "" then %>
+                <% 
+                local lines = {}
+                for line in nss_diag:gmatch("[^\n]+") do
+                    table.insert(lines, line)
+                end
+                
+                if #lines > 0 then
+                    local i = 1
+                    while i <= #lines do
+                        local line = lines[i]
+                        local trimmed_line = line:trim()
+                        
+                        if trimmed_line ~= "" then 
+                            local key, value = trimmed_line:match("^%s*([^:%s].-):%s*(.+)$")
+                            
+                            if key and value then
+                                key = key:trim()
+                                value = value:trim()
+                                 
+                                if key == "INTERFACE" then
+                %>
+                                <div class="info-row">
+                                    <div class="info-label"><%= key %></div>
+                                    <div class="info-value">
+                                        <div class="interface-table">
+                                            <%  
+                                            local interface_name, checksum, gro = value:match("^(%S+)%s+tx%-checksumming:%s+(%S+)%s+rx%-gro%-list:%s+(%S+)$")
+                                            if interface_name then
+                                            %>
+                                            <div class="interface-row">
+                                                <div class="interface-name"><%= interface_name %></div>
+                                                <div class="interface-checksum">tx-checksumming: <%= checksum %></div>
+                                                <div class="interface-gro">rx-gro-list: <%= gro %></div>
+                                            </div>
+                                            <% 
+                                            end
+                                             
+                                            i = i + 1
+                                            while i <= #lines do
+                                                local next_line = lines[i]
+                                                local next_trimmed = next_line:trim()
+                                                 
+                                                if next_trimmed ~= "" and not next_trimmed:match("^[A-Z][A-Z%s]+:") then
+                                                    local interface_name, checksum, gro = next_trimmed:match("^(%S+)%s+tx%-checksumming:%s+(%S+)%s+rx%-gro%-list:%s+(%S+)$")
+                                                    if interface_name then
+                                            %>
+                                            <div class="interface-row">
+                                                <div class="interface-name"><%= interface_name %></div>
+                                                <div class="interface-checksum">tx-checksumming: <%= checksum %></div>
+                                                <div class="interface-gro">rx-gro-list: <%= gro %></div>
+                                            </div>
+                                            <% 
+                                                    end
+                                                    i = i + 1
+                                                else
+                                                    break
+                                                end
+                                            end
+                                            %>
+                                        </div>
+                                    </div>
+                                </div>
+                <% 
+                                elseif key == "NSS PKGS" then
+                %>
+                                <div class="info-row">
+                                    <div class="info-label"><%= key %></div>
+                                    <div class="info-value">
+                                        <div class="packages-list">
+                                            <%  
+                                            if value and value ~= "" then
+                                            %>
+                                            <div class="package-item"><%= value %></div>
+                                            <%
+                                            end
+                                             
+                                            i = i + 1
+                                            while i <= #lines do
+                                                local next_line = lines[i]
+                                                local next_trimmed = next_line:trim()
+                                                 
+                                                if next_trimmed ~= "" and not next_trimmed:match("^[A-Z][A-Z%s]+:") then
+                                            %>
+                                            <div class="package-item"><%= next_trimmed %></div>
+                                            <%
+                                                    i = i + 1
+                                                else 
+                                                    if next_trimmed == "" then
+                                                        i = i + 1
+                                                    end
+                                                    break
+                                                end
+                                            end
+                                            %>
+                                        </div>
+                                    </div>
+                                </div>
+                <%
+                                else 
+                %>
+                                <div class="info-row">
+                                    <div class="info-label"><%= key %></div>
+                                    <div class="info-value"><%= value %></div>
+                                </div>
+                <%
+                                    i = i + 1
+                                end
+                            else 
+                                i = i + 1
+                            end
+                        else
+                            i = i + 1
+                        end
+                    end
+                else
+                %>
+                    <div class="info-row">
+                        <div class="info-label">Status</div>
+                        <div class="info-value">No data</div>
+                    </div>
+                <% end %>
+            <% else %>
+                <div class="info-row">
+                    <div class="info-label">Status</div>
+                    <div class="info-value">No data</div>
+                </div>
+            <% end %>
+        </div>
+    </div>
+
+    <div class="terminal-box">
+        <h2>RMNET RX Stats</h2>
+        <div class="rmnet-container">
+            <% if rmnet_stats and rmnet_stats ~= "" then %>
+                <% 
+ 
+                local interfaces = {}
+                local current_interface = nil
+                local current_data = {}
+                
+                for line in rmnet_stats:gmatch("[^\n]+") do
+                    local trimmed = line:trim()
+                    
+ 
+                    if trimmed:match("^#interface%s*$") then 
+                        if current_interface and #current_data > 0 then
+                            table.insert(interfaces, {
+                                name = current_interface,
+                                data = current_data
+                            })
+                        end
+                        
+ 
+                        current_interface = "rmnet_rx[" .. (#interfaces + 28) .. "]"
+                        current_data = {}
+                    elseif trimmed ~= "" and not trimmed:match("^_+$") and 
+                           not trimmed:match("^<<+") and not trimmed:match("^>>+") and
+                           not trimmed:match("^#interface") then
+ 
+                        if current_interface then 
+                            local stat_name, stat_value, stat_type = trimmed:match("^(.-)=(.+)%s+(%S+)$")
+                            if stat_name then
+                                stat_name = stat_name:trim():gsub("^rmnet_rx%[[0-9]+%]_", "")
+                                stat_value = stat_value:trim()
+                                table.insert(current_data, {
+                                    name = stat_name,
+                                    value = stat_value,
+                                    type = stat_type
+                                })
+                            end
+                        end
+                    end
+                end
+                 
+                if current_interface and #current_data > 0 then
+                    table.insert(interfaces, {
+                        name = current_interface,
+                        data = current_data
+                    })
+                end
+                 
+                if #interfaces > 0 then
+                    for _, interface in ipairs(interfaces) do
+                %>
+                <div class="interface-section">
+                    <h3 class="interface-title"><%= interface.name %></h3>
+                    <div class="info-grid">
+                        <% 
+                        for _, stat in ipairs(interface.data) do
+                        %>
+                        <div class="info-row" data-type="<%= stat.type %>">
+                            <div class="info-label"><%= stat.name %></div>
+                            <div class="info-value"><%= stat.value %> <span class="stat-type">(<%= stat.type %>)</span></div>
+                        </div>
+                        <%
+                        end
+                        %>
+                    </div>
+                </div>
+                <%
+                    end
+                else
+                %>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Status</div>
+                        <div class="info-value">No interface data found</div>
+                    </div>
+                </div>
+                <% end %>
+            <% else %>
+                <div class="info-grid">
+                    <div class="info-row">
+                        <div class="info-label">Status</div>
+                        <div class="info-value">No data</div>
+                    </div>
+                </div>
+            <% end %>
+        </div>
+    </div>
+</div>
+
+<script> 
+(function() {
+    'use strict';
+    
+    function detectTheme() { 
+        const bodyStyle = window.getComputedStyle(document.body);
+        const bgColor = bodyStyle.backgroundColor;
+         
+        const rgb = bgColor.match(/\d+/g);
+        if (rgb) {
+            const r = parseInt(rgb[0]);
+            const g = parseInt(rgb[1]);
+            const b = parseInt(rgb[2]);
+             
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+             
+            return luminance < 0.5;
+        }
+         
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        return prefersDark;
+    }
+    
+    function applyTheme(isDark) {
+        const root = document.documentElement;
+        
+        if (isDark) {
+            root.style.setProperty('--primary-bg', '#1a1a1a');
+            root.style.setProperty('--secondary-bg', '#2d2d2d');
+            root.style.setProperty('--tertiary-bg', '#3d3d3d');
+            root.style.setProperty('--text-primary', '#ffffff');
+            root.style.setProperty('--text-secondary', '#cccccc');
+            root.style.setProperty('--text-muted', '#999999');
+            root.style.setProperty('--border-color', '#444444');
+            root.style.setProperty('--accent-color', '#4dabf7');
+            root.style.setProperty('--warning-color', '#ff6b6b');
+            root.style.setProperty('--success-color', '#51cf66');
+            root.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.5)');
+            document.body.classList.add('dark-theme');
+            document.body.classList.remove('light-theme');
+        } else {
+            root.style.setProperty('--primary-bg', '#ffffff');
+            root.style.setProperty('--secondary-bg', '#f8f9fa');
+            root.style.setProperty('--tertiary-bg', '#e9ecef');
+            root.style.setProperty('--text-primary', '#212529');
+            root.style.setProperty('--text-secondary', '#495057');
+            root.style.setProperty('--text-muted', '#6c757d');
+            root.style.setProperty('--border-color', '#dee2e6');
+            root.style.setProperty('--accent-color', '#007bff');
+            root.style.setProperty('--warning-color', '#dc3545');
+            root.style.setProperty('--success-color', '#28a745');
+            root.style.setProperty('--shadow-color', 'rgba(0, 0, 0, 0.1)');
+            document.body.classList.add('light-theme');
+            document.body.classList.remove('dark-theme');
+        }
+    }
+     
+    document.addEventListener('DOMContentLoaded', function() {
+        const isDarkMode = detectTheme();
+        applyTheme(isDarkMode);
+    });
+     
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        const isDarkMode = detectTheme();
+        applyTheme(isDarkMode);
+    });
+})();
+</script>
+
+<style>
+:root { 
+    --primary-bg: #ffffff;
+    --secondary-bg: #f8f9fa;
+    --tertiary-bg: #e9ecef;
+    --text-primary: #212529;
+    --text-secondary: #495057;
+    --text-muted: #6c757d;
+    --border-color: #dee2e6;
+    --accent-color: #007bff;
+    --warning-color: #dc3545;
+    --success-color: #28a745;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark-theme {
+    color-scheme: dark;
+}
+
+.terminal-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.terminal-box {
+    background-color: var(--secondary-bg);
+    padding: 15px;  
+}
+
+.terminal-box h2 {
+    margin-bottom: 15px;
+    color: var(--text-primary);
+    font-size: 18px; 
+    padding-bottom: 8px;
+}
+ 
+.info-grid {
+    display: flex;
+    flex-direction: column;
+}
+
+.info-row {
+    display: flex;
+    min-height: 40px;
+    align-items: stretch;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-row:hover {
+    background-color: var(--tertiary-bg);
+}
+
+.info-label {
+    width: 40%;
+    padding: 10px 12px;
+    border-right: 1px solid var(--border-color);
+    background-color: var(--tertiary-bg);
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+    font-size: 14px;
+}
+
+.info-value {
+    width: 60%;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+ 
+.interface-table {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.interface-row {
+    display: flex;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border-color);
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.interface-row:last-child {
+    border-bottom: none;
+}
+
+.interface-name {
+    width: 30%;
+    font-weight: 600;
+    color: var(--accent-color);
+}
+
+.interface-checksum {
+    width: 40%;
+    color: var(--text-secondary);
+}
+
+.interface-gro {
+    width: 30%;
+    color: var(--text-secondary);
+}
+ 
+.packages-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.package-item {
+    padding: 6px 8px;
+    border-bottom: 1px dotted var(--border-color);
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+}
+
+.dark-theme .package-item {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.package-item:last-child {
+    border-bottom: none;
+}
+
+.package-item:hover {
+    background-color: var(--tertiary-bg);
+}
+ 
+.rmnet-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.interface-section {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background-color: var(--primary-bg);
+}
+
+.interface-title {
+    background-color: var(--text-muted);
+    color: white;
+    margin: 0;
+    padding: 12px 15px;
+    font-size: 16px;
+    font-weight: 600;
+}
+ 
+.light-theme .info-row[data-type="common"] {
+    background-color: #e8f4fd;
+}
+
+.light-theme .info-row[data-type="drop"] {
+    background-color: #fde8e8;
+}
+
+.light-theme .info-row[data-type="special"] {
+    background-color: var(--tertiary-bg);
+}
+ 
+.dark-theme .info-row[data-type="common"] {
+    background-color: rgba(77, 171, 247, 0.2);
+}
+
+.dark-theme .info-row[data-type="drop"] {
+    background-color: rgba(255, 107, 107, 0.2);
+}
+
+.dark-theme .info-row[data-type="special"] {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .terminal-box {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .interface-section {
+    background-color: var(--secondary-bg);
+}
+
+.dark-theme .interface-title {
+    background-color: #495057;
+}
+
+.dark-theme .info-label {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.dark-theme .info-row:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-theme .interface-name {
+    color: #4dabf7;
+}
+
+.dark-theme .package-item {
+    color: #cccccc;
+}
+
+.stat-type {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-left: 8px;
+}
+ 
+@media (max-width: 768px) {
+    .terminal-container {
+        gap: 15px;
+    }
+    
+    .terminal-box {
+        padding: 10px;
+    }
+    
+    .rmnet-container {
+        gap: 15px;
+    }
+    
+    .interface-title {
+        padding: 10px 12px;
+        font-size: 15px;
+    }
+    
+    .info-row {
+        flex-direction: column;
+        min-height: auto;
+    }
+    
+    .info-label {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+    
+    .info-value {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+    }
+    
+    .interface-row {
+        flex-direction: column;
+        gap: 4px;
+        padding: 8px 0;
+    }
+    
+    .interface-name,
+    .interface-checksum,
+    .interface-gro {
+        width: 100%;
+    }
+    
+    .stat-type {
+        align-self: flex-end;
+        margin-left: 0;
+    }
+}
+</style>
+
+<%+footer%>
