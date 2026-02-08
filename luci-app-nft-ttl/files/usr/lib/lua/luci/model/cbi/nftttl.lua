@@ -1,16 +1,14 @@
 local uci = require "luci.model.uci".cursor()
 local util = require "luci.util"
-
 local m = Map("nftttl", translate("TTL Settings"))
-
 local support = m:section(SimpleSection)
 support.template = "admin_support_info"
-
 local s = m:section(NamedSection, "ttl", "ttl", translate("Settings"))
 s.addremove = false
-
-s:option(Flag, "enabled", translate("Enable"))
-
+local enabled = s:option(Flag, "enabled", translate("Enable"))
+enabled.default = 1
+enabled.rmempty = false
+enabled.description = translate("1 = Enable TTL/HopLimit modification, 0 = Disable")
 local ttl4 = s:option(Value, "value", translate("IPv4 TTL Value"))
 ttl4.datatype = "uinteger"
 ttl4.default = 64
@@ -26,12 +24,16 @@ hl6.description = translate(
 )
 
 function m.on_after_commit(map)
+    local en = uci:get("nftttl", "ttl", "enabled") or "0"
+    local ipv4 = uci:get("nftttl", "ttl", "value") or "64"
+    local ipv6 = uci:get("nftttl", "ttl", "hl6") or "64"
     util.exec("/etc/init.d/nft-custom-ttl restart &")
 
-    util.exec(string.format('logger -t nft-custom-ttl "TTL %s IPv4 / %s IPv6 updated and service restarted"', 
-        uci:get("nftttl", "ttl", "value") or "64", 
-        uci:get("nftttl", "ttl", "hl6") or "64"
-    ))
+    if en == "1" then
+        util.exec(string.format('logger -t nft-custom-ttl "TTL %s IPv4 / %s IPv6 applied and service restarted"', ipv4, ipv6))
+    else
+        util.exec('logger -t nft-custom-ttl "TTL/HopLimit disabled; service restarted without applying rules"')
+    end
 end
 
 return m
