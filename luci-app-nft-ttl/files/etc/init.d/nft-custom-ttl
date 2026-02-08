@@ -9,6 +9,7 @@ USE_PROCD=1
 NFT="/usr/sbin/nft"
 NFT_DIR="/etc/nftables.d"
 NFT_FILE="$NFT_DIR/ttl64.nft"
+FIREWALL_INCLUDE="/etc/firewall.d/nftttl"
 
 start_service() {
     config_load 'nftttl'
@@ -26,63 +27,78 @@ set_if_ttl() {
 
     [ "$enabled" != "1" ] && return 0
 
-    logger -t nft-custom-ttl "Overwrite IPv4 TTL to $ttl4 and IPv6 Hop Limit to $hl6 (nftables)"
+    logger -t nft-custom-ttl "Setting IPv4 TTL=$ttl4, IPv6 Hop Limit=$hl6"
 
-    mkdir -p "$NFT_DIR"
-    [ -f "$NFT_FILE" ] && rm -f "$NFT_FILE"
+    $NFT delete table inet ttl_table 2>/dev/null
 
     cat > "$NFT_FILE" <<-EOF
-chain mangle_prerouting_ttl64 {
-    type filter hook prerouting priority 300; policy accept;
-    counter
-    meta nfproto ipv4 ip ttl set $ttl4
-}
-
-chain mangle_postrouting_ttl64 {
-    type filter hook postrouting priority 300; policy accept;
-    counter
-    meta nfproto ipv4 ip ttl set $ttl4
-}
-
-chain mangle_prerouting_hoplimit64 {
-    type filter hook prerouting priority 300; policy accept;
-    counter
-    meta nfproto ipv6 ip6 hoplimit set $hl6
-}
-
-chain mangle_postrouting_hoplimit64 {
-    type filter hook postrouting priority 300; policy accept;
-    counter
-    meta nfproto ipv6 ip6 hoplimit set $hl6
-}
+    chain mangle_prerouting {
+        type filter hook prerouting priority mangle; policy accept;
+        ip ttl != $ttl4 ip ttl set $ttl4 counter
+        ip6 hoplimit != $hl6 ip6 hoplimit set $hl6 counter
+    }
+    
+    chain mangle_postrouting {
+        type filter hook postrouting priority mangle; policy accept;
+        ip ttl != $ttl4 ip ttl set $ttl4 counter
+        ip6 hoplimit != $hl6 ip6 hoplimit set $hl6 counter
+    }
+    
+    chain mangle_forward {
+        type filter hook forward priority mangle; policy accept;
+        ip ttl != $ttl4 ip ttl set $ttl4 counter
+        ip6 hoplimit != $hl6 ip6 hoplimit set $hl6 counter
+    }
 EOF
 
+    mkdir -p /etc/firewall.d
+    echo "#!/bin/sh" > "$FIREWALL_INCLUDE"
+    echo "nft -f $NFT_FILE" >> "$FIREWALL_INCLUDE"
+    chmod +x "$FIREWALL_INCLUDE"
+
     $NFT -f "$NFT_FILE"
-    /etc/init.d/firewall reload
 
-    [ -d /sys/module/shortcut_fe_cm ] && rmmod shortcut_fe_cm 2>/dev/null
-    [ -d /sys/module/fast_classifier ] && rmmod fast_classifier 2>/dev/null
+    if [ -f /etc/init.d/firewall ]; then
+        /etc/init.d/firewall reload 2>/dev/null || /etc/init.d/firewall restart
+    fi
+
+    for module in shortcut_fe_cm fast_classifier; do
+        if lsmod | grep -q "^${module} "; then
+            rmmod $module 2>/dev/null
+            logger -t nft-custom-ttl "Disabled $module for TTL modification"
+        fi
+    done
+
+    logger -t nft-custom-ttl "TTL rules applied successfully"
 }
 
-
-stop_service(){
-    logger -t modem_ttl "Remove TTL / HopLimit nft rules"
-    local kernel_version=$(uname -r)
-    rm -f /etc/firewall.d/nftttl
-    rm -f /etc/nftables.d/*.nft
-    [ -f /etc/init.d/qca-nss-ecm ] && /etc/init.d/qca-nss-ecm start
-    [ -e "/lib/modules/$kernel_version/shortcut-fe-cm.ko" ] && modprobe shortcut-fe-cm
-    [ -e "/lib/modules/$kernel_version/fast-classifier.ko" ] && modprobe fast-classifier
-    /etc/init.d/firewall restart
+stop_service() {
+    logger -t nft-custom-ttl "Removing TTL/HopLimit rules"
+    
+    $NFT delete table inet ttl_table 2>/dev/null
+    
+    rm -f "$NFT_FILE" "$FIREWALL_INCLUDE"
+    
+    if [ -f /etc/init.d/firewall ]; then
+        /etc/init.d/firewall restart
+    fi
+    
+    for module in shortcut_fe_cm fast_classifier; do
+        if [ -e "/lib/modules/$(uname -r)/${module//-/_}.ko" ]; then
+            insmod $module 2>/dev/null
+        fi
+    done
+    
+    logger -t nft-custom-ttl "TTL rules removed"
 }
 
-service_triggers()
-{
-	procd_add_reload_trigger "nftttl"
+service_triggers() {
+    procd_add_reload_trigger "nftttl"
 }
 
-reload_service()
-{
-    stop
-    start
+reload_service() {
+    logger -t nft-custom-ttl "Reloading TTL configuration"
+    stop_service
+    sleep 1
+    start_service
 }
