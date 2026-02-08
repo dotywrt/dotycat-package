@@ -12,27 +12,26 @@ NFT_FILE="$NFT_DIR/ttl64.nft"
 
 start_service() {
     config_load 'nftttl'
-    config_get enable 'main' 'enable' '0'
-    [ "$enable" = "0" ] && return 0
+    config_get enable 'ttl' 'enabled' '0'
+    [ "$enable" != "1" ] && return 0
 
     set_if_ttl
 }
 
 set_if_ttl() {
-    # Read config
     config_load 'nftttl'
     config_get enabled 'ttl' 'enabled' '0'
     config_get ttl4 'ttl' 'value' '64'
-    config_get hl6 'ttl' 'value' '64'  # same as ttl4 if not separate
+    config_get hl6 'ttl' 'hl6' '64'
 
     [ "$enabled" != "1" ] && return 0
 
-    logger -t modem_ttl "Overwrite IPv4 TTL to $ttl4 and IPv6 Hop Limit to $hl6 (nftables)"
+    logger -t nft-custom-ttl "Overwrite IPv4 TTL to $ttl4 and IPv6 Hop Limit to $hl6 (nftables)"
 
-    mkdir -p $NFT_DIR
+    mkdir -p "$NFT_DIR"
     [ -f "$NFT_FILE" ] && rm -f "$NFT_FILE"
 
-    cat > $NFT_FILE <<-EOF
+    cat > "$NFT_FILE" <<-EOF
 chain mangle_prerouting_ttl64 {
     type filter hook prerouting priority 300; policy accept;
     counter
@@ -58,12 +57,13 @@ chain mangle_postrouting_hoplimit64 {
 }
 EOF
 
-    $NFT -f $NFT_FILE
+    $NFT -f "$NFT_FILE"
     /etc/init.d/firewall reload
 
     [ -d /sys/module/shortcut_fe_cm ] && rmmod shortcut_fe_cm 2>/dev/null
     [ -d /sys/module/fast_classifier ] && rmmod fast_classifier 2>/dev/null
 }
+
 
 stop_service(){
     logger -t modem_ttl "Remove TTL / HopLimit nft rules"
