@@ -1,5 +1,6 @@
 
 config ttl 'ttl'
 	option value '64'
+	option hl6 '64'
 	option enabled '1'
 
