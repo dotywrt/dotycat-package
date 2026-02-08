@@ -23,7 +23,7 @@ set_if_ttl() {
     config_load 'nftttl'
     config_get enabled 'ttl' 'enabled' '0'
     config_get ttl4 'ttl' 'value' '64'
-    config_get hl6 'ttl' 'value' '64'
+    config_get hl6 'ttl' 'value' '64'  # same as ttl4 if not separate
 
     [ "$enabled" != "1" ] && return 0
 
