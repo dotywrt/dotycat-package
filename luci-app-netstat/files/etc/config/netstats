@@ -1,6 +1,5 @@
 
 config config
 	option show_status '1'
-	option backend 'vnstat'
-	option mode 'daily'
+	option backend 'normal'
 
