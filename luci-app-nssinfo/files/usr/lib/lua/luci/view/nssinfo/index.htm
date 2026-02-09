@@ -17,20 +17,23 @@
                         local line = lines[i]
                         local trimmed_line = line:trim()
                         
-                        if trimmed_line ~= "" then 
+                        if trimmed_line ~= "" then
+                            -- Cari pola KEY: VALUE
                             local key, value = trimmed_line:match("^%s*([^:%s].-):%s*(.+)$")
                             
                             if key and value then
                                 key = key:trim()
                                 value = value:trim()
-                                 
+                                
+                                -- Special handling for INTERFACE section
                                 if key == "INTERFACE" then
                 %>
                                 <div class="info-row">
                                     <div class="info-label"><%= key %></div>
                                     <div class="info-value">
                                         <div class="interface-table">
-                                            <%  
+                                            <% 
+                                            -- Parse the first interface line
                                             local interface_name, checksum, gro = value:match("^(%S+)%s+tx%-checksumming:%s+(%S+)%s+rx%-gro%-list:%s+(%S+)$")
                                             if interface_name then
                                             %>
@@ -41,12 +44,14 @@
                                             </div>
                                             <% 
                                             end
-                                             
+                                            
+                                            -- Continue with subsequent interface lines
                                             i = i + 1
                                             while i <= #lines do
                                                 local next_line = lines[i]
                                                 local next_trimmed = next_line:trim()
-                                                 
+                                                
+                                                -- Check if this is another interface line (not starting with uppercase letter + colon)
                                                 if next_trimmed ~= "" and not next_trimmed:match("^[A-Z][A-Z%s]+:") then
                                                     local interface_name, checksum, gro = next_trimmed:match("^(%S+)%s+tx%-checksumming:%s+(%S+)%s+rx%-gro%-list:%s+(%S+)$")
                                                     if interface_name then
@@ -67,31 +72,37 @@
                                         </div>
                                     </div>
                                 </div>
-                <% 
+                <%
+                                -- Special handling for NSS PKGS section
                                 elseif key == "NSS PKGS" then
                 %>
                                 <div class="info-row">
                                     <div class="info-label"><%= key %></div>
                                     <div class="info-value">
                                         <div class="packages-list">
-                                            <%  
+                                            <% 
+                                            -- Display the first package (value from the NSS PKGS: line)
                                             if value and value ~= "" then
                                             %>
                                             <div class="package-item"><%= value %></div>
                                             <%
                                             end
-                                             
+                                            
+                                            -- Continue with subsequent package lines
                                             i = i + 1
                                             while i <= #lines do
                                                 local next_line = lines[i]
                                                 local next_trimmed = next_line:trim()
-                                                 
+                                                
+                                                -- Check if this is another package line 
+                                                -- (indented lines that don't match "UPPERCASE TEXT:")
                                                 if next_trimmed ~= "" and not next_trimmed:match("^[A-Z][A-Z%s]+:") then
                                             %>
                                             <div class="package-item"><%= next_trimmed %></div>
                                             <%
                                                     i = i + 1
-                                                else 
+                                                else
+                                                    -- If we hit an empty line or a new section, stop
                                                     if next_trimmed == "" then
                                                         i = i + 1
                                                     end
@@ -103,7 +114,8 @@
                                     </div>
                                 </div>
                 <%
-                                else 
+                                else
+                                    -- Regular key-value pair
                 %>
                                 <div class="info-row">
                                     <div class="info-label"><%= key %></div>
@@ -112,7 +124,8 @@
                 <%
                                     i = i + 1
                                 end
-                            else 
+                            else
+                                -- Skip lines that don't match KEY: VALUE pattern
                                 i = i + 1
                             end
                         else
@@ -140,7 +153,7 @@
         <div class="rmnet-container">
             <% if rmnet_stats and rmnet_stats ~= "" then %>
                 <% 
- 
+                -- Split by interface sections
                 local interfaces = {}
                 local current_interface = nil
                 local current_data = {}
@@ -148,8 +161,9 @@
                 for line in rmnet_stats:gmatch("[^\n]+") do
                     local trimmed = line:trim()
                     
- 
-                    if trimmed:match("^#interface%s*$") then 
+                    -- Check if this is an interface header (starts with #interface)
+                    if trimmed:match("^#interface%s*$") then
+                        -- Save previous interface if exists
                         if current_interface and #current_data > 0 then
                             table.insert(interfaces, {
                                 name = current_interface,
@@ -157,14 +171,15 @@
                             })
                         end
                         
- 
+                        -- Start new interface
                         current_interface = "rmnet_rx[" .. (#interfaces + 28) .. "]"
                         current_data = {}
                     elseif trimmed ~= "" and not trimmed:match("^_+$") and 
                            not trimmed:match("^<<+") and not trimmed:match("^>>+") and
                            not trimmed:match("^#interface") then
- 
-                        if current_interface then 
+                        -- Add data line to current interface
+                        if current_interface then
+                            -- Parse the stat line
                             local stat_name, stat_value, stat_type = trimmed:match("^(.-)=(.+)%s+(%S+)$")
                             if stat_name then
                                 stat_name = stat_name:trim():gsub("^rmnet_rx%[[0-9]+%]_", "")
@@ -178,14 +193,16 @@
                         end
                     end
                 end
-                 
+                
+                -- Add the last interface
                 if current_interface and #current_data > 0 then
                     table.insert(interfaces, {
                         name = current_interface,
                         data = current_data
                     })
                 end
-                 
+                
+                -- Display each interface
                 if #interfaces > 0 then
                     for _, interface in ipairs(interfaces) do
                 %>
@@ -333,7 +350,8 @@
     font-size: 18px; 
     padding-bottom: 8px;
 }
- 
+
+/* Main info grid */
 .info-grid {
     display: flex;
     flex-direction: column;
@@ -376,7 +394,8 @@
     color: var(--text-primary);
     font-size: 14px;
 }
- 
+
+/* Interface table styling */
 .interface-table {
     width: 100%;
     display: flex;
@@ -411,7 +430,8 @@
     width: 30%;
     color: var(--text-secondary);
 }
- 
+
+/* Packages list styling */
 .packages-list {
     width: 100%;
     display: flex;
@@ -440,7 +460,8 @@
 .package-item:hover {
     background-color: var(--tertiary-bg);
 }
- 
+
+/* RMNET Container */
 .rmnet-container {
     display: flex;
     flex-direction: column;
@@ -462,7 +483,8 @@
     font-size: 16px;
     font-weight: 600;
 }
- 
+
+/* Light theme specific */
 .light-theme .info-row[data-type="common"] {
     background-color: #e8f4fd;
 }
@@ -474,7 +496,8 @@
 .light-theme .info-row[data-type="special"] {
     background-color: var(--tertiary-bg);
 }
- 
+
+/* Dark theme specific */
 .dark-theme .info-row[data-type="common"] {
     background-color: rgba(77, 171, 247, 0.2);
 }
@@ -521,7 +544,8 @@
     font-style: italic;
     margin-left: 8px;
 }
- 
+
+/* Responsive design */
 @media (max-width: 768px) {
     .terminal-container {
         gap: 15px;
