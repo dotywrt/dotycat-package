@@ -1,5 +1,6 @@
 
 config config
-	option prefer 'wwan0_1'
-	option backend 'normal'
+	option show_status '1'
+	option backend 'vnstat'
+	option mode 'daily'
 
