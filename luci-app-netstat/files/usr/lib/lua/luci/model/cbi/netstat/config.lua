@@ -8,6 +8,15 @@ local m = Map("netstats", translate("Netstat"),
 local s = m:section(TypedSection, "config", translate("Settings"))
 s.anonymous = true
 
+local show = s:option(Flag, "show_status", translate("Show on Status homepage"))
+show.description = translate(
+    "Enable or disable Netstat widget on the Status homepage only."
+)
+show.default  = show.enabled
+show.rmempty = false
+show.enabled  = "1"
+show.disabled = "0"
+
 local backend = s:option(ListValue, "backend", translate("Traffic Backend"))
 backend.default = "normal"
 backend:value("normal", translate("Normal (Real-time)"))
@@ -24,8 +33,8 @@ iface.description = translate(
     "Select the interface for tracking WAN traffic. Leave blank to auto-detect." ..
     "<br><br><b>Backend Mode Explanation:</b><br>" ..
     "<ul>" ..
-    "<li><b>vnStat</b>: Uses the vnStat database. It provides daily/monthly usage, but traffic updates are delayed depending on vnStat interval.</li>" ..
-    "<li><b>Normal</b>: Reads directly from system interfaces in real time (no delay), but does not keep history.</li>" ..
+    "<li><b>vnStat</b>: Uses the vnStat database. Traffic data is delayed.</li>" ..
+    "<li><b>Normal</b>: Real-time traffic, no history.</li>" ..
     "</ul>"
 )
 iface:value("", translate("Auto detect"))
@@ -48,8 +57,7 @@ function reset.write(self, section)
     sys.call("/etc/init.d/vnstat stop")
     sys.call("rm -f " .. dbdir .. "/* >/dev/null 2>&1")
 
-    local netm = net.init()
-    for _, dev in ipairs(netm:get_interfaces()) do
+    for _, dev in ipairs(net.init():get_interfaces()) do
         local name = dev:shortname()
         if name and not name:match("^lo$") and not name:match("^br%-") then
             sys.call("vnstat -u -i " .. name .. " >/dev/null 2>&1")
