@@ -6,6 +6,20 @@ let prev = {};
 let last_time = Date.now();
 let ipVisible = localStorage.getItem('ipVisible') !== 'false';
 let currentIface = '';
+let widgetEnabled = true;
+
+function checkWidgetStatus() {
+	return fs.exec('/sbin/uci', ['get', 'netstats.@config[0].show_status'])
+		.then(res => {
+			const val = res.stdout.trim();
+			widgetEnabled = (val === '1');
+			return widgetEnabled;
+		})
+		.catch(() => {
+			widgetEnabled = true;
+			return true;
+		});
+}
 
 (function loadDynamicCSS() {
 	function isDarkMode() {
@@ -189,78 +203,97 @@ return baseclass.extend({
 	title: _(''),
 
 	load: function () {
-		return Promise.all([
-			fs.read_direct('/proc/net/dev').then(parseStats).catch(() => ({})),
-			getPublicIP(),
-			getPreferredInterfaces(),
-			getMode(),
-			getBackend()
-		]).then(async ([netStats, ipData, preferred, mode, backend]) => {
-			const iface = getBestWAN(netStats, preferred);
-			let vnstatRx = 0, vnstatTx = 0;
+		return checkWidgetStatus().then(shouldShow => {
+			if (!shouldShow) {
+				return Promise.resolve({ hideWidget: true });
+			}
+			
+			return Promise.all([
+				fs.read_direct('/proc/net/dev').then(parseStats).catch(() => ({})),
+				getPublicIP(),
+				getPreferredInterfaces(),
+				getMode(),
+				getBackend()
+			]).then(async ([netStats, ipData, preferred, mode, backend]) => {
+				const iface = getBestWAN(netStats, preferred);
+				let vnstatRx = 0, vnstatTx = 0;
 
-			if (backend === 'vnstat') {
-				try {
-					const res = await fs.exec('/usr/bin/vnstat', ['-i', iface, '--json']);
-					const json = JSON.parse(res.stdout);
-					const key = mode === 'daily' ? 'days' : (mode === 'monthly' ? 'months' : 'days');
-					const trafficArr = json.interfaces?.[0]?.traffic?.[key];
+				if (backend === 'vnstat') {
+					try {
+						const res = await fs.exec('/usr/bin/vnstat', ['-i', iface, '--json']);
+						const json = JSON.parse(res.stdout);
+						const key = mode === 'daily' ? 'days' : (mode === 'monthly' ? 'months' : 'days');
+						const trafficArr = json.interfaces?.[0]?.traffic?.[key];
 
-					if (Array.isArray(trafficArr) && trafficArr.length > 0) {
-						const today = new Date();
-						let matchEntry;
+						if (Array.isArray(trafficArr) && trafficArr.length > 0) {
+							const today = new Date();
+							let matchEntry;
 
-						if (mode === 'monthly') {
-							matchEntry = trafficArr.find(e =>
-								e.date &&
-								e.date.year === today.getFullYear() &&
-								e.date.month === today.getMonth() + 1
-							);
-						} else {
-							matchEntry = trafficArr.find(e =>
-								e.date &&
-								e.date.year === today.getFullYear() &&
-								e.date.month === today.getMonth() + 1 &&
-								e.date.day === today.getDate()
-							);
-						}
-
-						if (matchEntry) {
-							vnstatRx = matchEntry.rx * 1024;
-							vnstatTx = matchEntry.tx * 1024;
-						} else {
-							const lastEntry = trafficArr[trafficArr.length - 1];
-							if (lastEntry) {
-								vnstatRx = lastEntry.rx * 1024;
-								vnstatTx = lastEntry.tx * 1024;
+							if (mode === 'monthly') {
+								matchEntry = trafficArr.find(e =>
+									e.date &&
+									e.date.year === today.getFullYear() &&
+									e.date.month === today.getMonth() + 1
+								);
 							} else {
-								const total = json.interfaces?.[0]?.traffic?.total;
-								if (total) {
-									vnstatRx = total.rx * 1024;
-									vnstatTx = total.tx * 1024;
+								matchEntry = trafficArr.find(e =>
+									e.date &&
+									e.date.year === today.getFullYear() &&
+									e.date.month === today.getMonth() + 1 &&
+									e.date.day === today.getDate()
+								);
+							}
+
+							if (matchEntry) {
+								vnstatRx = matchEntry.rx * 1024;
+								vnstatTx = matchEntry.tx * 1024;
+							} else {
+								const lastEntry = trafficArr[trafficArr.length - 1];
+								if (lastEntry) {
+									vnstatRx = lastEntry.rx * 1024;
+									vnstatTx = lastEntry.tx * 1024;
+								} else {
+									const total = json.interfaces?.[0]?.traffic?.total;
+									if (total) {
+										vnstatRx = total.rx * 1024;
+										vnstatTx = total.tx * 1024;
+									}
 								}
 							}
+						} else {
+							const total = json.interfaces?.[0]?.traffic?.total;
+							if (total) {
+								vnstatRx = total.rx * 1024;
+								vnstatTx = total.tx * 1024;
+							}
 						}
-					} else {
-						const total = json.interfaces?.[0]?.traffic?.total;
-						if (total) {
-							vnstatRx = total.rx * 1024;
-							vnstatTx = total.tx * 1024;
-						}
+					} catch (e) {
+						console.warn('vnstat error:', e);
 					}
-				} catch (e) {
-					console.warn('vnstat error:', e);
+				} else {
+					vnstatRx = netStats[iface]?.rx || 0;
+					vnstatTx = netStats[iface]?.tx || 0;
 				}
-			} else {
-				vnstatRx = netStats[iface]?.rx || 0;
-				vnstatTx = netStats[iface]?.tx || 0;
-			}
 
-			return { netStats, ipData, preferred, vnstatRx, vnstatTx, mode, backend };
+				return { 
+					netStats, 
+					ipData, 
+					preferred, 
+					vnstatRx, 
+					vnstatTx, 
+					mode, 
+					backend,
+					hideWidget: false 
+				};
+			});
 		});
 	},
 
 	render: function (data) {
+		if (data.hideWidget) {
+			return E('div', { style: 'display: none;' });
+		}
+
 		const now = Date.now();
 		const dt = Math.max(0.1, (now - last_time) / 1000);
 		last_time = now;
@@ -331,7 +364,8 @@ return baseclass.extend({
 						vnstatRx: data.vnstatRx,
 						vnstatTx: data.vnstatTx,
 						mode: data.mode,
-						backend: data.backend
+						backend: data.backend,
+						hideWidget: false
 					});
 				});
 
