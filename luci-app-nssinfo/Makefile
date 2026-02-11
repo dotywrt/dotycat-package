@@ -9,7 +9,7 @@ PKG_LICENSE:=GPL-3.0
 
 LUCI_TITLE:=NSS Info
 LUCI_DESCRIPTION:=This LuCI app displays NSS diagnostics and RMNET RX stats.
-LUCI_DEPENDS:=+luci +kmod-rmnet-nss @NSS_DRV_RMNET_ENABLE
+LUCI_DEPENDS:=+luci +kmod-rmnet-nss
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
 
