@@ -1,4 +1,4 @@
 
 config atcommands
-	option set_port ''
+	option set_port '/dev/ttyUSB3'
 
