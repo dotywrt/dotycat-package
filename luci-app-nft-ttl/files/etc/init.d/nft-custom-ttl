@@ -31,24 +31,12 @@ set_if_ttl() {
 
     $NFT delete table inet ttl_table 2>/dev/null
 
-    cat > "$NFT_FILE" <<-EOF
-    chain mangle_prerouting {
-        type filter hook prerouting priority mangle; policy accept;
-        ip ttl != $ttl4 ip ttl set $ttl4 counter
-        ip6 hoplimit != $hl6 ip6 hoplimit set $hl6 counter
-    }
-    
-    chain mangle_postrouting {
-        type filter hook postrouting priority mangle; policy accept;
-        ip ttl != $ttl4 ip ttl set $ttl4 counter
-        ip6 hoplimit != $hl6 ip6 hoplimit set $hl6 counter
-    }
-    
-    chain mangle_forward {
-        type filter hook forward priority mangle; policy accept;
-        ip ttl != $ttl4 ip ttl set $ttl4 counter
-        ip6 hoplimit != $hl6 ip6 hoplimit set $hl6 counter
-    }
+    cat > $NFT_FILE <<-EOF
+chain postrouting {
+    type filter hook postrouting priority mangle; policy accept;
+    iifname "br-lan" ip ttl set $ttl4 comment "Reset TTL for br-lan IPv4"
+    iifname "br-lan" ip6 hoplimit set $hl6 comment "Reset Hop Limit for br-lan IPv6"
+}
 EOF
 
     mkdir -p /etc/firewall.d
